@@ -1,4 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Volume2, Download } from 'lucide-react';
+
+function speakUrl(url) {
+  if (url) {
+    try { const a = new Audio(url); a.play(); return true; } catch { /* ignore */ }
+  }
+  return false;
+}
+
+function speakJa(text) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  const utter = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const ja = voices.find(v => v.lang?.toLowerCase().startsWith('ja')) || voices.find(v => v.lang?.toLowerCase().includes('ja'));
+  if (ja) utter.voice = ja;
+  utter.lang = 'ja-JP';
+  window.speechSynthesis.speak(utter);
+  return true;
+}
+
+function playAudio({ url, text }) {
+  if (!speakUrl(url)) {
+    const ok = speakJa(text);
+    if (!ok) alert('Perangkat tidak mendukung audio. Aktifkan suara browser atau gunakan perangkat lain.');
+  }
+}
 
 // Simple canvas tracing for hiragana/katakana
 export default function TracingPractice({ item, onComplete, audioUrl }) {
@@ -55,7 +81,6 @@ export default function TracingPractice({ item, onComplete, audioUrl }) {
   const end = () => { setIsDrawing(false); };
 
   const reset = () => setPaths([]);
-  const playAudio = () => { if (audioUrl) { const a = new Audio(audioUrl); a.play(); } };
 
   return (
     <div className="w-full flex flex-col items-center gap-3">
@@ -78,7 +103,12 @@ export default function TracingPractice({ item, onComplete, audioUrl }) {
       </div>
       <div className="flex gap-2">
         <button onClick={reset} className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">Reset</button>
-        <button onClick={playAudio} className="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700">Dengar Audio</button>
+        <button onClick={() => playAudio({ url: audioUrl, text: item })} className="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 inline-flex items-center gap-2"><Volume2 size={16}/>Dengar Audio</button>
+        {audioUrl ? (
+          <a href={audioUrl} download className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 inline-flex items-center gap-2"><Download size={16}/>Unduh Audio</a>
+        ) : (
+          <a href="https://ttsmp3.com/text-to-speech/Japanese/" target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 inline-flex items-center gap-2"><Download size={16}/>Buat & Unduh Audio</a>
+        )}
         <button onClick={() => onComplete && onComplete(paths)} className="px-3 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700">Selesai</button>
       </div>
     </div>

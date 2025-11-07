@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, XCircle, Volume2, RefreshCw, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Volume2, RefreshCw, Info, Download } from 'lucide-react';
 
 // Minimal local SRS utilities
 function now() { return Date.now(); }
@@ -9,7 +9,31 @@ function scheduleNext(correctLevel) {
   return now() + days * 24 * 60 * 60 * 1000;
 }
 
-function speak(url) { if (!url) return; const a = new Audio(url); a.play(); }
+// Audio helpers: use file if provided, else fallback to Web Speech API (ja-JP)
+function speakUrl(url) {
+  if (url) {
+    try { const a = new Audio(url); a.play(); return true; } catch { /* ignore */ }
+  }
+  return false;
+}
+
+function speakJa(text) {
+  if (!('speechSynthesis' in window)) return false;
+  const utter = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const ja = voices.find(v => v.lang?.toLowerCase().startsWith('ja')) || voices.find(v => v.lang?.toLowerCase().includes('ja'));
+  if (ja) utter.voice = ja;
+  utter.lang = 'ja-JP';
+  window.speechSynthesis.speak(utter);
+  return true;
+}
+
+function playAudio({ url, text }) {
+  if (!speakUrl(url)) {
+    const ok = speakJa(text);
+    if (!ok) alert('Perangkat tidak mendukung audio. Aktifkan suara browser atau gunakan perangkat lain.');
+  }
+}
 
 // Example content for demo purposes
 const defaultVocab = [
@@ -29,6 +53,20 @@ function useLocalData(key, initial) {
   });
   useEffect(() => { localStorage.setItem(key, JSON.stringify(state)); }, [key, state]);
   return [state, setState];
+}
+
+function AudioActions({ url, text }) {
+  const canDownload = Boolean(url);
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => playAudio({ url, text })} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700"><Volume2 size={18}/>Dengar</button>
+      {canDownload ? (
+        <a href={url} download className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><Download size={16}/>Unduh Audio</a>
+      ) : (
+        <a href="https://ttsmp3.com/text-to-speech/Japanese/" target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50"><Download size={16}/>Buat & Unduh Audio (TTS)</a>
+      )}
+    </div>
+  );
 }
 
 export function VocabPractice({ onResult }) {
@@ -68,7 +106,7 @@ export function VocabPractice({ onResult }) {
         <div className="flex flex-col items-center gap-3">
           <img src={item.img} alt={item.idn} className="w-56 h-40 object-cover rounded-xl border border-slate-200" />
           <div className="text-5xl font-bold tracking-tight">{item.jp}</div>
-          <button onClick={() => speak(item.audio)} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700"><Volume2 size={18}/>Dengar</button>
+          <AudioActions url={item.audio} text={item.jp} />
           {mode === 'choice' && (
             <div className="grid grid-cols-2 gap-2 w-full mt-2">
               {options.map(opt => (
@@ -136,7 +174,7 @@ export function SentencePractice({ onResult }) {
     <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-slate-800">Latihan Kalimat</h3>
-        <button onClick={() => speak(item.audio)} className="flex items-center gap-2 text-slate-600 hover:text-slate-900"><Volume2 size={18}/>Dengar</button>
+        <button onClick={() => playAudio({ url: item.audio, text: item.pattern.replace('___','') })} className="flex items-center gap-2 text-slate-600 hover:text-slate-900"><Volume2 size={18}/>Dengar</button>
       </div>
       <div className="text-3xl font-bold tracking-tight mb-2">{item.pattern}</div>
       <div className="text-sm text-slate-600 mb-3 flex items-center gap-2"><Info size={16}/>Isi bagian kosong dengan kata yang tepat.</div>
