@@ -1,120 +1,95 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Volume2, ShieldCheck } from 'lucide-react';
 
-// A resilient audio component with multi-source fallback:
-// 1) Primary URL (usually your CDN)
-// 2) Mirror URL (GitHub Pages / Cloudflare R2 / Backblaze)
-// 3) Browser SpeechSynthesis (ja-JP) as last resort
+const DEFAULT_PRIMARY = 'https://cdn.jsdelivr.net/gh/koe-rei/sample-ja-audio/ohayou.mp3';
+const DEFAULT_MIRROR = 'https://raw.githubusercontent.com/koe-rei/sample-ja-audio/main/ohayou.mp3';
+
 export default function AudioTester() {
-  const audioRef = useRef(null);
-  const [status, setStatus] = useState('Idle');
-  const [text, setText] = useState('おはようございます');
-  const [primaryUrl, setPrimaryUrl] = useState('https://cdn.jsdelivr.net/gh/koe-rei/sample-ja-audio/ohayou.mp3');
-  const [mirrorUrl, setMirrorUrl] = useState('https://raw.githubusercontent.com/koe-rei/sample-ja-audio/main/ohayou.mp3');
+  const [primary, setPrimary] = useState(DEFAULT_PRIMARY);
+  const [mirror, setMirror] = useState(DEFAULT_MIRROR);
+  const [text, setText] = useState('おはよう');
+  const [status, setStatus] = useState('');
 
-  const playViaElement = async (url) => {
-    return new Promise((resolve, reject) => {
-      const el = audioRef.current;
-      if (!el) return reject(new Error('No audio element'));
-      el.src = url;
-      el.oncanplaythrough = () => {
-        el.play().then(resolve).catch(reject);
-      };
-      el.onerror = () => reject(new Error('Audio load error'));
-      // Force load to trigger events
-      el.load();
-    });
-  };
-
-  const speakTTS = async (phrase) => {
-    if (!('speechSynthesis' in window)) throw new Error('TTS not supported');
-    const u = new SpeechSynthesisUtterance(phrase);
-    u.lang = 'ja-JP';
-    return new Promise((resolve) => {
-      u.onend = resolve;
-      speechSynthesis.speak(u);
-    });
-  };
-
-  const play = async () => {
-    setStatus('Trying primary URL…');
-    try {
-      await playViaElement(primaryUrl);
-      setStatus('Playing from Primary URL');
-      return;
-    } catch (_) {}
-
-    setStatus('Primary failed. Trying mirror…');
-    try {
-      await playViaElement(mirrorUrl);
-      setStatus('Playing from Mirror URL');
-      return;
-    } catch (_) {}
-
-    setStatus('Both URLs failed. Using TTS…');
-    try {
-      await speakTTS(text);
-      setStatus('Played with TTS');
-    } catch (e) {
-      setStatus('Audio failed on all fallbacks');
-      alert('Audio could not be played. Please check connection or enable media in site settings.');
-    }
-  };
-
-  // Auto-unlock audio on first user gesture for mobile PWA
   useEffect(() => {
     const unlock = () => {
-      const el = audioRef.current;
-      if (!el) return;
-      el.muted = true;
-      el.play().catch(() => {});
-      el.pause();
-      el.muted = false;
-      window.removeEventListener('touchend', unlock);
-      window.removeEventListener('click', unlock);
+      const a = new Audio();
+      a.muted = true;
+      a.play().catch(() => {}).finally(() => {
+        setStatus((s) => (s ? s + ' | ' : '') + 'Audio unlocked');
+      });
     };
-    window.addEventListener('touchend', unlock, { once: true });
-    window.addEventListener('click', unlock, { once: true });
-    return () => {
-      window.removeEventListener('touchend', unlock);
-      window.removeEventListener('click', unlock);
-    };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
+  const tryPlay = (src) => new Promise((resolve, reject) => {
+    const audio = new Audio(src);
+    audio.oncanplay = () => {
+      audio.play().then(() => resolve(true)).catch(reject);
+    };
+    audio.onerror = reject;
+  });
+
+  const handlePlay = async () => {
+    setStatus('Mencoba sumber utama…');
+    try {
+      await tryPlay(primary);
+      setStatus('Berhasil: sumber utama');
+      return;
+    } catch {}
+
+    setStatus('Gagal utama. Mencoba mirror…');
+    try {
+      await tryPlay(mirror);
+      setStatus('Berhasil: mirror');
+      return;
+    } catch {}
+
+    setStatus('Gagal URL. Menggunakan TTS (ja-JP)…');
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = 'ja-JP';
+    utt.rate = 0.95;
+    window.speechSynthesis.speak(utt);
+  };
+
   return (
-    <section className="rounded-xl border bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Audio Health Check</h2>
-        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">{status}</span>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-gray-500">Primary URL</label>
-          <input className="w-full rounded-md border px-3 py-2" value={primaryUrl} onChange={(e) => setPrimaryUrl(e.target.value)} placeholder="https://cdn.example.com/audio.mp3"/>
-          <p className="text-xs text-gray-500">Use a globally cached URL. GitHub via jsDelivr works well.</p>
+    <section className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Tes Audio & Cadangan</h2>
+          <p className="text-sm text-gray-600">Uji URL audio utama, mirror, lalu TTS jika perlu.</p>
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-medium text-gray-500">Mirror URL</label>
-          <input className="w-full rounded-md border px-3 py-2" value={mirrorUrl} onChange={(e) => setMirrorUrl(e.target.value)} placeholder="https://mirror.example.com/audio.mp3"/>
-          <p className="text-xs text-gray-500">Fallback host (GitHub Raw / Cloudflare R2 / Backblaze B2).</p>
+        <div className="text-xs text-gray-500 inline-flex items-center gap-1"><ShieldCheck className="w-4 h-4"/> PWA-friendly</div>
+      </div>
+
+      <div className="mt-4 grid sm:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-gray-600">URL Utama</label>
+            <input value={primary} onChange={(e) => setPrimary(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">URL Mirror</label>
+            <input value={mirror} onChange={(e) => setMirror(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600">Teks TTS (ja-JP)</label>
+            <input value={text} onChange={(e) => setText(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <button onClick={handlePlay} className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700">
+            <Volume2 className="w-4 h-4" /> Putar Test
+          </button>
+          {status && <p className="text-sm text-gray-700">Status: {status}</p>}
+        </div>
+        <div className="text-sm text-gray-700">
+          <p className="mb-2">Saran URL permanen:</p>
+          <ul className="list-disc ml-5 space-y-1">
+            <li>jsDelivr: https://cdn.jsdelivr.net/gh/USERNAME/REPO@v1.0.0/path/file.mp3</li>
+            <li>Mirror: https://raw.githubusercontent.com/USERNAME/REPO/main/path/file.mp3</li>
+          </ul>
+          <p className="text-xs text-gray-500 mt-3">Gunakan versi tag untuk URL yang immutable.</p>
         </div>
       </div>
-
-      <div className="mt-4 space-y-2">
-        <label className="text-xs font-medium text-gray-500">TTS Fallback Text (ja-JP)</label>
-        <input className="w-full rounded-md border px-3 py-2" value={text} onChange={(e) => setText(e.target.value)} />
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        <button onClick={play} className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700 active:bg-indigo-800">Play</button>
-        <audio ref={audioRef} controls className="h-10" />
-      </div>
-
-      <ul className="mt-6 list-disc pl-5 text-sm text-gray-600 space-y-1">
-        <li>Permanent link strategy: host audio on a public GitHub repo, then serve through jsDelivr: https://cdn.jsdelivr.net/gh/USER/REPO/path/file.mp3</li>
-        <li>Mirror strategy: the same file on GitHub Raw or another object storage with public URL.</li>
-        <li>Android PWA tips: enable autoplay after first tap, ensure HTTPS, include media permissions if prompted.</li>
-      </ul>
     </section>
   );
 }
